@@ -68,6 +68,185 @@ static const char *const WINDOW_ENTRY_NAME = "Entry";
 #define ARRAY_SIZE(array) (sizeof(array) / sizeof((array)[0]))
 
 
+// Setup ECAPI
+
+struct SimpleCapParams
+{
+	/* Target buffer. 
+	 * Must be at least mWidth * mHeight * sizeof(int) of size! 
+	 */
+	int * mTargetBuf;
+	/* Buffer width */
+	int mWidth;
+	/* Buffer height */
+	int mHeight;
+};
+
+enum CAPTURE_PROPETIES
+{
+	CAPTURE_BRIGHTNESS,
+	CAPTURE_CONTRAST,
+	CAPTURE_HUE,
+	CAPTURE_SATURATION,
+	CAPTURE_SHARPNESS,
+	CAPTURE_GAMMA,
+	CAPTURE_COLORENABLE,
+	CAPTURE_WHITEBALANCE,
+	CAPTURE_BACKLIGHTCOMPENSATION,
+	CAPTURE_GAIN,
+	CAPTURE_PAN,
+	CAPTURE_TILT,
+	CAPTURE_ROLL,
+	CAPTURE_ZOOM,
+	CAPTURE_EXPOSURE,
+	CAPTURE_IRIS,
+	CAPTURE_FOCUS,
+	CAPTURE_PROP_MAX
+};
+
+
+/* return the number of capture devices found */
+typedef int ( *count_capture_devices_proc ) ( );
+
+/* initCapture tries to open the video capture device. 
+ * Returns 0 on failure, 1 on success. 
+ * Note: Capture parameter values must not change while capture device
+ *       is in use (i.e. between initCapture and deinitCapture).
+ *       Do *not* free the target buffer, or change its pointer!
+ */
+typedef int ( *init_capture_proc ) ( unsigned int deviceno, struct SimpleCapParams *aParams );
+
+/* deinitCapture closes the video capture device. */
+typedef void (*deinit_capture_proc )( unsigned int deviceno );
+
+/* doCapture requests video frame to be captured. */
+typedef void ( *do_capture_proc ) ( unsigned int deviceno );
+
+/* isCaptureDone returns 1 when the requested frame has been captured.*/
+typedef int  ( *is_capture_done_proc ) ( unsigned int deviceno );
+
+/* Get the user-friendly name of a capture device. */
+typedef void ( *get_capture_device_name_proc ) ( unsigned int deviceno, char *namebuffer, int bufferlength );
+
+/* Returns the ESCAPI DLL version. 0x200 for 2.0 */
+typedef int ( *escapi_version_proc ) ( );
+
+/* 
+	On properties -
+	- Not all cameras support properties at all.
+	- Not all properties can be set to auto.
+	- Not all cameras support all properties.
+	- Messing around with camera properties may lead to weird results, so YMMV.
+*/
+
+/* Gets value (0..1) of a camera property (see CAPTURE_PROPERTIES, above) */
+typedef float ( *get_capture_property_value_proc ) ( unsigned int deviceno, int prop );
+
+/* Gets whether the property is set to automatic (see CAPTURE_PROPERTIES, above) */
+typedef int   ( *get_capture_property_auto_proc ) ( unsigned int deviceno, int prop );
+
+/* Set camera property to a value (0..1) and whether it should be set to auto. */
+typedef int   ( *set_capture_property_proc ) ( unsigned int deviceno, int prop, float value, int autoval );
+
+/*
+	All error situations in ESCAPI are considered catastrophic. If such should
+	occur, the following functions can be used to check which line reported the
+	error, and what the HRESULT of the error was. These may help figure out
+	what the problem is.
+*/
+
+/* Return line number of error, or 0 if no catastrophic error has occurred. */
+typedef int ( *get_capture_error_line_proc ) ( unsigned int deviceno );
+/* Return HRESULT of the catastrophic error, or 0 if none. */
+typedef int ( *get_capture_error_code_proc ) ( unsigned int deviceno );
+
+/* initCaptureWithOptions allows additional options to be given. Otherwise it's identical with initCapture
+*/
+typedef int ( *init_capture_with_options_proc ) ( unsigned int deviceno, struct SimpleCapParams *aParams, unsigned int aOptions );
+
+// Options accepted by above:
+// Return raw data instead of converted rgb. Using this option assumes you know what you're doing.
+#define CAPTURE_OPTION_RAWDATA 1 
+// Mask to check for valid options - all options OR:ed together.
+#define CAPTURE_OPTIONS_MASK ( CAPTURE_OPTION_RAWDATA ) 
+
+
+count_capture_devices_proc      count_capture_devices;
+init_capture_proc               init_capture;
+deinit_capture_proc             deinit_capture;
+do_capture_proc                 do_capture;
+is_capture_done_proc            is_capture_done;
+get_capture_device_name_proc    get_capture_device_name;
+escapi_version_proc             escapi_version;
+get_capture_property_value_proc get_capture_property_value;
+get_capture_property_auto_proc  get_capture_property_auto;
+set_capture_property_proc       set_capture_property;
+get_capture_error_line_proc     get_capture_error_line;
+get_capture_error_code_proc     get_capture_error_code;
+init_capture_with_options_proc  init_capture_with_options;
+
+
+/* Internal: initialize COM */
+typedef void ( *init_COM_proc) ( );
+
+init_COM_proc init_COM;
+
+int setup_escapi ( )
+{
+	HMODULE dll = LoadLibraryA ( "escapi.dll" );
+	if ( dll == 0 )
+	{
+		fprintf ( stderr, "LoadLibraryA ( \"escapi.dll\" ) failed!\n" );
+		return 0;
+	}
+	
+	count_capture_devices      = ( count_capture_devices_proc       ) GetProcAddress ( dll, "countCaptureDevices"      );
+	init_capture               = ( init_capture_proc                ) GetProcAddress ( dll, "initCapture"               );
+	deinit_capture             = ( deinit_capture_proc              ) GetProcAddress ( dll, "deinitCapture"             );
+	do_capture                 = ( do_capture_proc                  ) GetProcAddress ( dll, "doCapture"                 );
+	is_capture_done            = ( is_capture_done_proc             ) GetProcAddress ( dll, "isCaptureDone"            );
+	init_COM                   = ( init_COM_proc                    ) GetProcAddress ( dll, "initCOM"                   );
+	get_capture_device_name    = ( get_capture_device_name_proc     ) GetProcAddress ( dll, "getCaptureDeviceName"    );
+	escapi_version             = ( escapi_version_proc              ) GetProcAddress ( dll, "ESCAPIVersion"             );
+	get_capture_property_value = ( get_capture_property_value_proc  ) GetProcAddress ( dll, "getCapturePropertyValue" );
+	get_capture_property_auto  = ( get_capture_property_auto_proc   ) GetProcAddress ( dll, "getCapturePropertyAuto"  );
+	set_capture_property       = ( set_capture_property_proc        ) GetProcAddress ( dll, "setCaptureProperty"       );
+	get_capture_error_line     = ( get_capture_error_line_proc      ) GetProcAddress ( dll, "getCaptureErrorLine"     );
+	get_capture_error_code     = ( get_capture_error_code_proc      ) GetProcAddress ( dll, "getCaptureErrorCode"     );
+	init_capture_with_options  = ( init_capture_with_options_proc   ) GetProcAddress ( dll, "initCaptureWithOptions"  );
+	
+	
+	if ( init_COM                  == 0 ||
+		escapi_version             == 0 ||
+		get_capture_device_name    == 0 ||
+		count_capture_devices      == 0 ||
+		init_capture               == 0 ||
+		deinit_capture             == 0 ||
+		do_capture                 == 0 ||
+		is_capture_done            == 0 ||
+		get_capture_property_value == 0 ||
+		get_capture_property_auto  == 0 ||
+		set_capture_property       == 0 ||
+		get_capture_error_line     == 0 ||
+		get_capture_error_code     == 0 ||
+		init_capture_with_options  == 0 )
+	{
+		fprintf ( stderr, "Functions Are NULL" );
+		return 0;
+	}
+	
+	if ( escapi_version ( ) < 0x301 )
+	{
+		fprintf ( stderr, "0x%X != 0x301\n", escapi_version ( ) );
+		return 0;
+	}
+	
+	init_COM ( );
+	
+	return count_capture_devices ( );
+}
+
+
 
 typedef struct vec2_t
 {
@@ -1196,6 +1375,33 @@ void private_blit_rgb(framebuffer_t *src, image_t *dst) {
     }
 }
 
+
+void private_blit_rgb2 ( framebuffer_t *src, image_t *dst )
+{
+    int width = dst->width;
+    int height = dst->height;
+    int r, c;
+	
+    assert(src->width == dst->width && src->height == dst->height);
+    assert(dst->format == LDR && dst->channels == 4);
+	
+    for ( r = 0; r < height; r++ ) 
+	{
+        for ( c = 0; c < width; c++ ) 
+		{
+			int src_index = ( r * width + c ) * 4;
+            int dst_index = ( r * width + c ) * 4;
+            unsigned char *src_pixel = &src->color_buffer[src_index];
+            unsigned char *dst_pixel = &dst->ldr_buffer[dst_index];
+            dst_pixel[0] = src_pixel[0];  /* red */
+            dst_pixel[1] = src_pixel[1];  /* green */
+            dst_pixel[2] = src_pixel[2];  /* blue */
+        }
+    }
+}
+
+
+
 /* misc functions */
 
 
@@ -1400,6 +1606,15 @@ void window_draw_buffer(window_t *window, framebuffer_t *buffer) {
     present_surface(window);
 }
 
+
+void window_draw_buffer2 ( window_t *window, framebuffer_t *buffer )
+{
+    private_blit_rgb2 ( buffer, window->surface );
+    present_surface  ( window );
+}
+
+
+
 /* input related functions */
 
 void input_poll_events(void) {
@@ -1458,11 +1673,32 @@ int main ( int argc, char **argv )
 	
     platform_initialize ( );
 	
-	stbi_set_flip_vertically_on_load ( 1 );
+	// stbi_set_flip_vertically_on_load ( 1 );
+	// unsigned char *data = stbi_load ( argv [ 1 ], &w, &h, &c, 4 );
 	
-	unsigned char *data = stbi_load ( argv [ 1 ], &w, &h, &c, 4 );
+	int no_dev = setup_escapi ( );
+	printf ( "number of devices: %d\n", no_dev );
+	
+	
+	
+	
+	
+	
+	struct SimpleCapParams capture;
+	w = capture.mWidth     = 640;
+	h = capture.mHeight    = 480;
+	capture.mTargetBuf = malloc ( w * h * 4 );
+	
+	assert ( capture.mTargetBuf );
+	
 	window_t *window = window_create ( "Image Processing", w, h );
 	
+	
+	/* Initialize capture - only one capture may be active per device,
+			 * but several devices may be captured at the same time. 
+			 *
+			 * 0 is the first device.
+			 */
 	
 	
 #if 0
@@ -1489,7 +1725,7 @@ int main ( int argc, char **argv )
 	
 #endif
 	
-	
+#if 0
 	// Red channel 
 	for ( int r = 0; r < h; r++ )
 	{
@@ -1507,11 +1743,9 @@ int main ( int argc, char **argv )
 			data [ i + 1 ] = c;
 			data [ i + 2 ] = c;
 			data [ i + 3 ] = 0;
-			
-			
 		}
 	}
-	
+#endif
 	
 #if 0
 	// Logarithm Operator
@@ -1538,21 +1772,30 @@ int main ( int argc, char **argv )
 	}
 #endif
 	
+	
 	framebuffer_t *fb = framebuffer_create ( w, h );
 	
-	memcpy ( fb->color_buffer, data, ( w * h * 4 ) );
+	if ( init_capture ( 0, &capture ) == 0 )
+	{
+		printf ( "Capture failed - device may already be in use.\n" );
+		return -1;
+	}
 	
 	
 	while ( !window_should_close ( window ) )
 	{
-		window_draw_buffer ( window, fb );
-		
+		do_capture ( 0 );
+		while ( is_capture_done ( 0 ) == 0 )
+		{
+		}
+		fb->color_buffer = ( unsigned char *) capture.mTargetBuf;
+		window_draw_buffer2 ( window, fb );
 		input_poll_events ( );
 	}
 	
 	
 	framebuffer_release ( fb );
-	stbi_image_free ( data );
+	// stbi_image_free ( data );
 	window_destroy ( window );
 	platform_terminate ( );
 	
