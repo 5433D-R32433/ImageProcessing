@@ -7,9 +7,9 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-
+#undef complex
 #include "minfft.h"
-#include "minfft.c"
+
 
 typedef enum 
 {
@@ -1336,7 +1336,8 @@ static void create_surface(HWND handle, int width, int height,
     *out_memory_dc = memory_dc;
 }
 
-window_t *window_create(const char *title, int width, int height) {
+window_t *window_create(const char *title, int width, int height ) 
+{
     window_t *window;
     HWND handle;
     image_t *surface;
@@ -1455,7 +1456,6 @@ int main ( int argc, char **argv )
 		return -1;
 	}
 	
-	
     platform_initialize ( );
 	
 	stbi_set_flip_vertically_on_load ( 1 );
@@ -1490,7 +1490,6 @@ int main ( int argc, char **argv )
 #endif
 	
 	
-#if 0
 	// Red channel 
 	for ( int r = 0; r < h; r++ )
 	{
@@ -1499,20 +1498,22 @@ int main ( int argc, char **argv )
 			int i = ( r * w + c ) * 4;
 			
 			unsigned char r = data [ i + 0 ];
-			unsigned char g = data [ r + 1 ];
-			unsigned char b = data [ r + 2 ];
+			unsigned char g = data [ i + 1 ];
+			unsigned char b = data [ i + 2 ];
 			
-			data [ i + 0 ] = r;
-			data [ i + 1 ] = r;
-			data [ i + 2 ] = r;
-			data [ i + 3 ] = r;
+			unsigned char c = ( r + g + b ) / 3;
+			
+			data [ i + 0 ] = c;
+			data [ i + 1 ] = c;
+			data [ i + 2 ] = c;
+			data [ i + 3 ] = 0;
 			
 			
 		}
 	}
 	
-#endif
 	
+#if 0
 	// Logarithm Operator
 	for ( int r = 0; r < h; r++ )
 	{
@@ -1535,8 +1536,7 @@ int main ( int argc, char **argv )
 			
 		}
 	}
-	
-	
+#endif
 	
 	framebuffer_t *fb = framebuffer_create ( w, h );
 	
